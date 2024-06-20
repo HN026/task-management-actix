@@ -1,5 +1,8 @@
-use super::*;
-use crate::lib::state::AppState;
+use crate::handlers::handlers::{
+    create_task, create_user, get_user_task, get_user_tasks, get_users, update_user_task,
+};
+use crate::model::models::{Task, TaskInput, TaskUpdate, User, UserInput};
+use crate::model::state::AppState;
 use actix_web::{http::StatusCode, test, web, App};
 use dotenv::dotenv;
 use sqlx::{Pool, Postgres};

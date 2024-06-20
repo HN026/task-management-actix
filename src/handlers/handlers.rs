@@ -1,5 +1,5 @@
-use crate::lib::models::{Info, Task, TaskInput, TaskUpdate, User, UserInput};
-use crate::lib::state::AppState;
+use crate::model::models::{Info, Task, TaskInput, TaskUpdate, User, UserInput};
+use crate::model::state::AppState;
 use actix_web::error::InternalError;
 use actix_web::{http::StatusCode, web, Error, HttpResponse, ResponseError};
 use chrono::NaiveDateTime;
@@ -311,6 +311,3 @@ pub async fn delete_user_task(
         Ok(HttpResponse::NoContent().finish())
     }
 }
-
-#[cfg(test)]
-mod test;

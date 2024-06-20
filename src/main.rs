@@ -1,82 +1,28 @@
-mod lib {
-    pub mod handlers;
-    pub mod models;
-    pub mod state;
-}
+mod db;
+mod handlers;
+mod model;
 
 use actix_cors::Cors;
 use actix_web::web::Data;
 use actix_web::{http::header, web, App, HttpServer, Responder};
+use db::server::create_pool_and_run_migrations;
 use dotenv::dotenv;
-use lib::handlers::{
+use handlers::handlers::{
     create_task, create_user, delete_user_task, get_user_task, get_user_tasks, get_users,
     update_user_task,
 };
-use lib::state::AppState;
-use sqlx::postgres::PgPoolOptions;
-use std::env;
+use model::state::AppState;
 
 async fn index() -> impl Responder {
     format!("Hello, world!")
-}
-
-async fn run_migrations(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        r#"
-        CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
-            name TEXT NOT NULL
-        );
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
-    sqlx::query(
-        r#"
-        CREATE TABLE IF NOT EXISTS tasks (
-            id SERIAL PRIMARY KEY,
-            title TEXT NOT NULL,
-            description TEXT,
-            due_date TIMESTAMP,
-            status TEXT NOT NULL,
-            user_id INTEGER REFERENCES users(id)
-        );
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
-    Ok(())
 }
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     env_logger::init();
     dotenv().ok();
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
-    let pool = match PgPoolOptions::new()
-        .max_connections(10)
-        .connect(&database_url)
-        .await
-    {
-        Ok(pool) => {
-            println!("Connected to the database successfully");
-            match run_migrations(&pool).await {
-                Ok(_) => println!("Migrations ran successfully"),
-                Err(e) => {
-                    println!("Failed to run migrations: {}", e);
-                    return Err(std::io::Error::new(std::io::ErrorKind::Other, e));
-                }
-            }
-            pool
-        }
-        Err(e) => {
-            println!("Failed to connect to the database: {}", e);
-            return Err(std::io::Error::new(std::io::ErrorKind::Other, e));
-        }
-    };
+    let pool = create_pool_and_run_migrations().await?;
 
     println!("Starting server at http://127.0.0.1:8080");
 

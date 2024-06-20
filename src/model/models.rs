@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use sqlx::types::chrono;
+use validator::Validate;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct User {
@@ -7,8 +8,9 @@ pub struct User {
     pub name: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct UserInput {
+    #[validate(length(min = 1))]
     pub name: String,
 }
 
@@ -22,11 +24,14 @@ pub struct Task {
     pub user_id: i32,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct TaskInput {
+    #[validate(length(min = 1))]
     pub title: String,
+    #[validate(length(min = 1))]
     pub description: String,
     pub due_date: Option<chrono::NaiveDateTime>,
+    #[validate(length(min = 1))]
     pub status: String,
 }
 
@@ -36,10 +41,13 @@ pub struct Info {
     pub task_id: i32,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct TaskUpdate {
+    #[validate(length(min = 1))]
     pub title: String,
+    #[validate(length(min = 1))]
     pub description: String,
     pub due_date: Option<chrono::NaiveDateTime>,
+    #[validate(length(min = 1))]
     pub status: String,
 }
