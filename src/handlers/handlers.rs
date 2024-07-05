@@ -1,8 +1,11 @@
-use crate::model::models::{Info, Task, TaskInput, TaskUpdate, User, UserInput};
+use crate::db::db::{
+    create_task_db, create_user_db, delete_user_task_db, get_all_users_db, get_user_task_db,
+    get_user_tasks_db, update_user_task_db,
+};
+use crate::model::models::{Info, TaskInput, TaskUpdate, UserInput};
 use crate::model::state::AppState;
 use actix_web::error::InternalError;
 use actix_web::{http::StatusCode, web, Error, HttpResponse, ResponseError};
-use chrono::NaiveDateTime;
 use log;
 use std::fmt;
 
@@ -39,28 +42,17 @@ pub async fn create_user(
         new_user.name
     );
 
-    let pool = &state.pool;
-    let record = sqlx::query!(
-        r#"
-        INSERT INTO users (name) VALUES ($1)
-        RETURNING id, name
-        "#,
-        &new_user.name,
-    )
-    .fetch_one(pool)
-    .await
-    .map_err(|e| {
-        log::error!("Failed to create user: {}", e);
-        InternalError::new(e, StatusCode::INTERNAL_SERVER_ERROR)
-    })?;
-
-    let user = User {
-        id: record.id,
-        name: record.name,
-    };
+    let user = create_user_db(&state.pool, &new_user.into_inner())
+        .await
+        .map_err(|e| {
+            log::error!("Failed to create user: {}", e);
+            actix_web::error::InternalError::new(
+                e,
+                actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
+            )
+        })?;
 
     log::info!("Successfully created user with id {}", user.id);
-
     Ok(HttpResponse::Ok().json(user))
 }
 
@@ -68,29 +60,12 @@ pub async fn create_user(
 pub async fn get_users(state: web::Data<AppState>) -> Result<HttpResponse, Error> {
     log::info!("Received request to get all users");
 
-    let pool = &state.pool;
-    let records = sqlx::query!(
-        r#"
-        SELECT id, name FROM users
-        "#,
-    )
-    .fetch_all(pool)
-    .await
-    .map_err(|e| {
+    let users = get_all_users_db(&state.pool).await.map_err(|e| {
         log::error!("Failed to get users: {}", e);
-        InternalError::new(e, StatusCode::INTERNAL_SERVER_ERROR)
+        InternalError::new(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR)
     })?;
 
-    let users: Vec<User> = records
-        .into_iter()
-        .map(|record| User {
-            id: record.id,
-            name: record.name,
-        })
-        .collect();
-
     log::info!("Successfully fetched {} users", users.len());
-
     Ok(HttpResponse::Ok().json(users))
 }
 
@@ -105,34 +80,14 @@ pub async fn create_task(
         user_id
     );
 
-    let pool = &state.pool;
-
-    let record = sqlx::query!(
-        r#"
-        INSERT INTO tasks (title, description, due_date, status, user_id) VALUES ($1, $2, $3, $4, $5)
-        RETURNING id, title, description, due_date, status, user_id
-        "#,
-        &new_task.title,
-        &new_task.description,
-        &new_task.due_date.unwrap_or_else(|| NaiveDateTime::from_timestamp(0, 0)),
-        &new_task.status,
-        &user_id.into_inner(),
-    ).fetch_one(pool).await.map_err(|e| {
-        log::error!("Failed to create task: {}", e);
-        CustomError::from(e)
-    })?;
-
-    let task = Task {
-        id: record.id,
-        title: record.title,
-        description: record.description.expect("Description is missing"),
-        due_date: record.due_date,
-        status: record.status,
-        user_id: record.user_id.expect("User ID is missing"),
-    };
+    let task = create_task_db(&state.pool, &new_task.into_inner(), user_id.into_inner())
+        .await
+        .map_err(|e| {
+            log::error!("Failed to create task: {}", e);
+            CustomError::from(e)
+        })?;
 
     log::info!("Successfully created task with id {}", task.id);
-
     Ok(HttpResponse::Ok().json(task))
 }
 
@@ -143,32 +98,10 @@ pub async fn get_user_tasks(
     let user_id = user_id.into_inner();
     log::info!("Received request to get tasks for user with id {}", user_id);
 
-    let pool = &state.pool;
-
-    let records = sqlx::query!(
-        r#"
-        SELECT id, title, description, due_date, status, user_id FROM tasks WHERE user_id = $1
-        "#,
-        &user_id,
-    )
-    .fetch_all(pool)
-    .await
-    .map_err(|e| {
+    let tasks = get_user_tasks_db(&state.pool, user_id).await.map_err(|e| {
         log::error!("Failed to get tasks for user with id {}: {}", user_id, e);
         InternalError::new(e, StatusCode::INTERNAL_SERVER_ERROR)
     })?;
-
-    let tasks: Vec<Task> = records
-        .into_iter()
-        .map(|record| Task {
-            id: record.id,
-            title: record.title,
-            description: record.description.expect("Description is missing"),
-            due_date: record.due_date,
-            status: record.status,
-            user_id: record.user_id.expect("User ID is missing"),
-        })
-        .collect();
 
     log::info!(
         "Successfully fetched {} tasks for user with id {}",
@@ -183,26 +116,11 @@ pub async fn get_user_task(
     info: web::Path<Info>,
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, Error> {
-    let pool = &state.pool;
+    let info = info.into_inner();
 
-    let record = sqlx::query!(
-        r#"
-        SELECT id, title, description, due_date, status, user_id FROM tasks WHERE user_id = $1 AND id = $2
-        "#,
-        info.user_id, info.task_id
-    )
-    .fetch_one(pool)
-    .await
-    .map_err(|e| InternalError::new(e, StatusCode::INTERNAL_SERVER_ERROR))?;
-
-    let task = Task {
-        id: record.id,
-        title: record.title,
-        description: record.description.expect("Description is missing"),
-        due_date: record.due_date,
-        status: record.status,
-        user_id: record.user_id.expect("User ID is missing"),
-    };
+    let task = get_user_task_db(&state.pool, info.user_id, info.task_id)
+        .await
+        .map_err(|e| InternalError::new(e, StatusCode::INTERNAL_SERVER_ERROR))?;
 
     Ok(HttpResponse::Ok().json(task))
 }
@@ -219,42 +137,17 @@ pub async fn update_user_task(
         info.user_id
     );
 
-    let pool = &state.pool;
-
-    let record = sqlx::query!(
-        r#"
-        UPDATE tasks
-        SET title = $1, description = $2, due_date = $3, status = $4
-        WHERE id = $5 AND user_id = $6
-        RETURNING id, title, description, due_date, status, user_id
-        "#,
-        task_update.title,
-        task_update.description,
-        task_update.due_date,
-        task_update.status,
-        info.task_id,
-        info.user_id,
-    )
-    .fetch_one(pool)
-    .await
-    .map_err(|e| {
-        log::error!(
-            "Failed to update task with id {} for user with id {}: {}",
-            info.task_id,
-            info.user_id,
-            e
-        );
-        InternalError::new(e, StatusCode::INTERNAL_SERVER_ERROR)
-    })?;
-
-    let task = Task {
-        id: record.id,
-        title: record.title,
-        description: record.description.expect("Description is missing"),
-        due_date: record.due_date,
-        status: record.status,
-        user_id: record.user_id.expect("User ID is missing"),
-    };
+    let task = update_user_task_db(&state.pool, info.clone(), task_update.into_inner())
+        .await
+        .map_err(|e| {
+            log::error!(
+                "Failed to update task with id {} for user with id {}: {}",
+                info.task_id,
+                info.user_id,
+                e
+            );
+            InternalError::new(e, StatusCode::INTERNAL_SERVER_ERROR)
+        })?;
 
     log::info!(
         "Successfully updated task with id {} for user with id {}",
@@ -276,32 +169,20 @@ pub async fn delete_user_task(
         info.user_id
     );
 
-    let pool = &state.pool;
+    let rows_affected = delete_user_task_db(&state.pool, info.clone())
+        .await
+        .map_err(|e| {
+            log::error!(
+                "Failed to delete task with id {} for user with id {}: {}",
+                info.task_id,
+                info.user_id,
+                e
+            );
+            InternalError::new(e, StatusCode::INTERNAL_SERVER_ERROR)
+        })?;
 
-    let deleted = sqlx::query!(
-        r#"
-        DELETE FROM tasks WHERE user_id = $1 AND id = $2
-        "#,
-        info.user_id,
-        info.task_id
-    )
-    .execute(pool)
-    .await
-    .map_err(|e| {
-        log::error!(
-            "Failed to delete task with id {} for user with id {}: {}",
-            info.task_id,
-            info.user_id,
-            e
-        );
-        actix_web::error::InternalError::new(e, StatusCode::INTERNAL_SERVER_ERROR)
-    })?;
-
-    if deleted.rows_affected() == 0 {
-        Err(
-            actix_web::error::InternalError::new("No task found to delete", StatusCode::NOT_FOUND)
-                .into(),
-        )
+    if rows_affected == 0 {
+        Err(InternalError::new("No task found to delete", StatusCode::NOT_FOUND).into())
     } else {
         log::info!(
             "Successfully deleted task with id {} for user with id {}",

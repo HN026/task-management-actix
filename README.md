@@ -17,7 +17,7 @@ Here are the available endpoints:
 
 ## Requirements
 
-To run this project, you need to have Rust installed on your machine. You also need a PostgreSQL database, as this project uses SQLx for database operations.
+To run this project, you need to have Rust installed on your machine. You also need a SqlLite database, as this project uses SQLx for database operations.
 
 ## Running the Project
 

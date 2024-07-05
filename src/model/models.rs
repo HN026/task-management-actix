@@ -35,7 +35,7 @@ pub struct TaskInput {
     pub status: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Info {
     pub user_id: i32,
     pub task_id: i32,
