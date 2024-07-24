@@ -1,4 +1,4 @@
-use super::migrations::run_migrations;
+use crate::db::migrations::run_migrations;
 use sqlx::postgres::PgPoolOptions;
 use std::env;
 

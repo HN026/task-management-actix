@@ -5,13 +5,19 @@ use validator::Validate;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct User {
     pub id: i32,
-    pub name: String,
+    pub username: String,
+    pub password_hash: String,
+    pub email: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct UserInput {
     #[validate(length(min = 1))]
-    pub name: String,
+    pub username: String,
+    #[validate(length(min = 8))]
+    pub password: String,
+    #[validate(email)]
+    pub email: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -50,4 +56,22 @@ pub struct TaskUpdate {
     pub due_date: Option<chrono::NaiveDateTime>,
     #[validate(length(min = 1))]
     pub status: String,
+}
+
+#[derive(Deserialize)]
+pub struct SignInInput {
+    pub username: String,
+    pub password: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Claims {
+    pub sub: String,
+    pub exp: usize,
+}
+
+#[derive(Serialize)]
+pub struct UserResponse {
+    pub user: User,
+    pub token: String,
 }

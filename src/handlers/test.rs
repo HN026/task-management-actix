@@ -22,14 +22,16 @@ async fn test_create_user() {
     let mut app = test::init_service(
         App::new()
             .app_data(web::Data::new(data))
-            .route("/create_user", web::post().to(create_user)),
+            .route("/users", web::post().to(create_user)),
     )
     .await;
 
     let req = test::TestRequest::post()
-        .uri("/create_user")
+        .uri("/users")
         .set_json(&UserInput {
-            name: "Huzaifa".into(),
+            username: "Huzaifatest".into(),
+            password: "securepassword123".into(),
+            email: "huzadsfsdfsdifa@example.com".into(),
         })
         .to_request();
 
@@ -38,7 +40,7 @@ async fn test_create_user() {
     assert_eq!(resp.status(), StatusCode::OK);
 
     let user: User = test::read_body_json(resp).await;
-    assert_eq!(user.name, "Huzaifa");
+    assert_eq!(user.username, "Huzaifatest");
 }
 
 // Get Users Test
@@ -88,7 +90,7 @@ async fn test_create_task() {
     .await;
 
     let req = test::TestRequest::post()
-        .uri("/users/2/tasks")
+        .uri("/users/1/tasks")
         .set_json(&TaskInput {
             title: "Test task".into(),
             description: "Test description".into(),

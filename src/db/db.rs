@@ -1,28 +1,39 @@
 use crate::model::models::{Info, Task, TaskInput, TaskUpdate, User, UserInput};
+use bcrypt::{hash, verify, DEFAULT_COST};
 use chrono::NaiveDateTime;
 use sqlx::{Error, PgPool};
 
 pub async fn create_user_db(pool: &PgPool, new_user: &UserInput) -> Result<User, Error> {
+    let password_hash = hash(&new_user.password, DEFAULT_COST)
+        .map_err(|e| Error::protocol(format!("Bcrypt error: {}", e)))?;
+
     let record = sqlx::query!(
         r#"
-        INSERT INTO users (name) VALUES ($1)
-        RETURNING id, name
+        INSERT INTO users (username, password_hash, email)
+        VALUES ($1, $2, $3)
+        RETURNING id, username, password_hash, email
         "#,
-        &new_user.name,
+        &new_user.username,
+        &password_hash,
+        &new_user.email,
     )
     .fetch_one(pool)
     .await?;
 
+    println!("Running this function");
+
     Ok(User {
         id: record.id,
-        name: record.name,
+        username: record.username,
+        password_hash: record.password_hash,
+        email: record.email,
     })
 }
 
 pub async fn get_all_users_db(pool: &PgPool) -> Result<Vec<User>, Error> {
     let records = sqlx::query!(
         r#"
-        SELECT id, name FROM users
+        SELECT id, username, password_hash, email FROM users
         "#
     )
     .fetch_all(pool)
@@ -32,7 +43,9 @@ pub async fn get_all_users_db(pool: &PgPool) -> Result<Vec<User>, Error> {
         .into_iter()
         .map(|record| User {
             id: record.id,
-            name: record.name,
+            username: record.username,
+            password_hash: record.password_hash,
+            email: record.email,
         })
         .collect();
 
@@ -157,4 +170,35 @@ pub async fn delete_user_task_db(pool: &PgPool, info: Info) -> Result<u64, Error
     .await?;
 
     Ok(result.rows_affected())
+}
+
+pub async fn authenticate_user(
+    pool: &PgPool,
+    username: &str,
+    password: &str,
+) -> Result<User, Error> {
+    let user = sqlx::query_as!(
+        User,
+        r#"
+        SELECT id, username, password_hash, email
+        FROM users
+        WHERE username = $1
+        "#,
+        username
+    )
+    .fetch_one(pool)
+    .await?;
+
+    if verify(password, &user.password_hash)
+        .map_err(|_| Error::protocol("Password verification failed"))?
+    {
+        Ok(User {
+            id: user.id,
+            username: user.username,
+            password_hash: String::new(),
+            email: user.email,
+        })
+    } else {
+        Err(Error::protocol("Invalid username or password"))
+    }
 }
