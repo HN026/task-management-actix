@@ -19,6 +19,13 @@ Here are the available endpoints:
 
 To run this project, you need to have Rust installed on your machine. You also need a SqlLite database, as this project uses SQLx for database operations.
 
+## Prerequisites
+
+Before running this project, you need to set the following environment variables:
+
+- `DATABASE_URL`: The URL to your database, which the application will use to store and manage data.
+- `SECRET_KEY`: A secret key used for securing the application, such as for signing JWT tokens.
+
 ## Running the Project
 
 1. Clone the repository.
