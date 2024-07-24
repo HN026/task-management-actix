@@ -1,5 +1,6 @@
 mod db;
 mod handlers;
+mod jwt;
 mod model;
 
 use actix_cors::Cors;
@@ -9,7 +10,7 @@ use db::server::create_pool_and_run_migrations;
 use dotenv::dotenv;
 use handlers::handlers::{
     create_task, create_user, delete_user_task, get_user_task, get_user_tasks, get_users,
-    update_user_task,
+    sign_in_handler, update_user_task,
 };
 use model::state::AppState;
 
@@ -57,6 +58,7 @@ async fn main() -> std::io::Result<()> {
                 "/users/{user_id}/tasks/{task_id}",
                 web::delete().to(delete_user_task),
             )
+            .route("/sign_in", web::post().to(sign_in_handler))
     })
     .bind("127.0.0.1:8080")?
     .run()

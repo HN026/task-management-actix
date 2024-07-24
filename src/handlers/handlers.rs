@@ -1,11 +1,12 @@
 use crate::db::db::{
-    create_task_db, create_user_db, delete_user_task_db, get_all_users_db, get_user_task_db,
-    get_user_tasks_db, update_user_task_db,
+    authenticate_user, create_task_db, create_user_db, delete_user_task_db, get_all_users_db,
+    get_user_task_db, get_user_tasks_db, update_user_task_db,
 };
-use crate::model::models::{Info, TaskInput, TaskUpdate, UserInput};
+use crate::jwt::jwt::generate_jwt;
+use crate::model::models::{Info, SignInInput, TaskInput, TaskUpdate, UserInput, UserResponse};
 use crate::model::state::AppState;
 use actix_web::error::InternalError;
-use actix_web::{http::StatusCode, web, Error, HttpResponse, ResponseError};
+use actix_web::{http::StatusCode, web, Error, HttpResponse, Responder, ResponseError};
 use log;
 use std::fmt;
 
@@ -32,28 +33,39 @@ impl ResponseError for CustomError {
     }
 }
 
-// Creates User
 pub async fn create_user(
     state: web::Data<AppState>,
     new_user: web::Json<UserInput>,
 ) -> Result<HttpResponse, Error> {
     log::info!(
-        "Received request to create user with name {}",
-        new_user.name
+        "Received request to create user with username {}",
+        new_user.username,
     );
 
     let user = create_user_db(&state.pool, &new_user.into_inner())
         .await
         .map_err(|e| {
             log::error!("Failed to create user: {}", e);
-            actix_web::error::InternalError::new(
+            actix_web::Error::from(actix_web::error::InternalError::new(
                 e,
                 actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
-            )
+            ))
         })?;
 
     log::info!("Successfully created user with id {}", user.id);
-    Ok(HttpResponse::Ok().json(user))
+
+    let token = generate_jwt(&user.id.to_string()).await.map_err(|e| {
+        log::error!("Failed to generate JWT: {}", e);
+        actix_web::Error::from(actix_web::error::InternalError::new(
+            e,
+            actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
+        ))
+    })?;
+
+    // Use the CreateUserResponse struct to construct the response
+    let response = UserResponse { user, token };
+
+    Ok(HttpResponse::Ok().json(response))
 }
 
 // Gets Users
@@ -190,5 +202,34 @@ pub async fn delete_user_task(
             info.user_id
         );
         Ok(HttpResponse::NoContent().finish())
+    }
+}
+
+pub async fn sign_in_handler(
+    state: web::Data<AppState>,
+    info: web::Json<SignInInput>,
+) -> impl Responder {
+    let username = &info.username;
+    let password = &info.password;
+
+    match authenticate_user(&state.pool, username, password).await {
+        Ok(user) => match generate_jwt(&user.id.to_string()).await {
+            Ok(token) => {
+                let response = UserResponse { user, token };
+                HttpResponse::Ok().json(response)
+            }
+            Err(e) => {
+                log::error!("JWT generation failed: {}", e);
+                HttpResponse::InternalServerError().body("Failed to generate token")
+            }
+        },
+        Err(e) => {
+            log::error!("Authentication failed: {}", e);
+            if e.to_string().contains("Invalid username or password") {
+                HttpResponse::Unauthorized().body("Invalid credentials")
+            } else {
+                HttpResponse::InternalServerError().body("Internal server error")
+            }
+        }
     }
 }
